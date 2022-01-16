@@ -1,5 +1,24 @@
 function CannyEdgeDetector(file)
 
+    function [in] = ConnectWeakEdges(in, coords)
+        height = size(in, 1);
+        width = size(in, 2);
+
+        row = coords(1);
+        col = coords(2);
+
+        for i = -1:1:1
+            for j = -1:1:1
+                if (0 < row + i && row + i < height) && (0 < col + j && col + j < width) && (i ~= 0 || j ~= 0)
+                    if 0 < in(row + i, col + j) && in(row + i, col + j) < 1
+                        in(row + i, col + j) = 1;
+                        in = ConnectWeakEdges(in, [row + i, col + j]);
+                    end
+                end
+            end
+        end
+    end
+
     close all;
     sigma = 2; % Gaussian filter sigma 1.4
     high_threshold_ratio = 0.2; % High threshold ratio
@@ -81,8 +100,8 @@ function CannyEdgeDetector(file)
     high_threshold = max(max(non_maximum_supression)) * high_threshold_ratio;
     low_threshold = high_threshold * low_threshold_ratio;
 
-    strong_edges = zeros(2, h);
-    weak_edges = zeros(2, w);
+    strong_edges = zeros(h, 2);
+    weak_edges = zeros(w, 2);
 
     strong_index = 1;
     weak_index = 1;
@@ -92,13 +111,14 @@ function CannyEdgeDetector(file)
         % col
         for j = 2 : w - 1
             % Strong edge
-            if non_maximum_supression(i, j) >= high_threshold
+            if non_maximum_supression(i, j) > high_threshold
                 non_maximum_supression(i, j) = 1;
                 strong_edges(strong_index, 1) = i;
                 strong_edges(strong_index, 2) = j;
                 strong_index = strong_index + 1;
             % Weak edge
-            elseif non_maximum_supression(i, j) >= low_threshold
+            elseif non_maximum_supression(i, j) > low_threshold
+                non_maximum_supression(i, j) = 0.5;
                 weak_edges(weak_index, 1) = i;
                 weak_edges(weak_index, 2) = j;
                 weak_index = weak_index + 1;
@@ -112,4 +132,16 @@ function CannyEdgeDetector(file)
     figure; imshow(non_maximum_supression, [min(non_maximum_supression(:)),max(non_maximum_supression(:))]); title('Hysteresis thresholding');
     
     % N3: Form longer edges (edge-linking w/ 8-connectivity of weak pixels to strong pixels)
+    set(0, 'RecursionLimit', 10000);
+    for i = 1 : strong_index - 1
+        non_maximum_supression = ConnectWeakEdges(non_maximum_supression, strong_edges(i, :));
+    end
+
+    for i = 1 : weak_index - 1
+        if non_maximum_supression(weak_edges(i, 1), weak_edges(i, 2)) ~= 1
+            non_maximum_supression(weak_edges(i, 1), weak_edges(i, 2)) = 0;
+        end
+    end
+
+    figure; imshow(non_maximum_supression, [min(non_maximum_supression(:)),max(non_maximum_supression(:))]); title('Link edges');
 end
